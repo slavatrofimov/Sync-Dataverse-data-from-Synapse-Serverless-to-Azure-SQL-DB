@@ -102,7 +102,7 @@ GO
 * Review performance and utilization of your target Azure SQL Database and adjust scale appropriately.
 
 * Schema evolution requires special consideration. While Synapse Link for Dataverse will automatically accommodate newly added columns (as documented [here](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/export-data-lake-faq)), this solution is not designed to accommodate new columns. If a new column has been added to a Dataverse entity, you may handle it by:
-    * . Manually altering the definition of the table in the target SQL Database (recommended)
+    * Manually altering the definition of the table in the target SQL Database (recommended)
     * Dropping the table in the target SQL Database and deleting all records in the orchestration.ProcessingLog table related to the affected table. The table will be re-added and fully loaded with data during the next scheduled synchronization.
 
 * If desired, consider hardening security settings of the implemented solution, which may include:
