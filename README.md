@@ -6,7 +6,7 @@
 
 While data exported via Synapse Link for Dataverse can be accessed using Synapse Analytics Serverless SQL Pools, some customers may prefer to make Dataverse data available in an Azure SQL Database to support a broader range of data integration or data enrichment requirements. This scenario may be particularly relevant for customers who previously used the [Data Export Service (DES)](https://docs.microsoft.com/en-us/power-apps/developer/data-platform/data-export-service) to bring Dataverse data from their Microsoft Dynamics applications to their Azure SQL Database. 
 
-The Data Export Service was deprecated in November 2021 and will reach its [end-of-support and end-of-life in November 2022](https://powerapps.microsoft.com/en-us/blog/do-more-with-data-from-data-export-service-to-azure-synapse-link-for-dataverse/). Synapse Link for Dataverse does not natively support an Azure SQL DB as the destination for data export. However, a flexible data integration solution can be implemented to copy Dataverse data from a Synapse Analytics Workspace an Azure SQL database as a replacement for the Data Export Service.
+The Data Export Service was deprecated in November 2021 and will reach its [end-of-support and end-of-life in November 2022](https://powerapps.microsoft.com/en-us/blog/do-more-with-data-from-data-export-service-to-azure-synapse-link-for-dataverse/). Synapse Link for Dataverse does not natively support an Azure SQL DB as the destination for data export. However, a flexible and scalable data integration solution can be implemented to copy Dataverse data from a Synapse Analytics Workspace an Azure SQL database as a replacement for the Data Export Service.
 
 ## Solution Overview
 This repository includes a solution accelerator for incrementally synchronizing Dataverse data from external tables or views in Synapse Serverless SQL Pool to an Azure SQL Database. The solution consists of Synapse Pipelines for data movement, as well as database objects for configuration and logging of the data integration process. This solution can be rapidly deployed to dynamically synchronize any number of tables between a Serverless SQL Pool and an Azure SQL DB.
@@ -33,28 +33,28 @@ To avoid read/write contention issues while reading data from files that are bei
 ### Implementation
 1. Provision an Azure SQL Database to serve as the target of your Dataverse data. [See documentation](https://docs.microsoft.com/en-us/azure/azure-sql/database/single-database-create-quickstart?view=azuresql&tabs=azure-portal). Ensure that the "Allow Azure services and resources to access this server" setting is enabled. [See documentation](https://docs.microsoft.com/en-us/azure/azure-sql/database/firewall-configure?view=azuresql)
 
-1. Grant your Synapse Analytics Workspace access to your target Azure SQL Database by adding the managed identity of your Synapse Analytics Workspace to the db_owner role in the Azure SQL Database. [See additional documentation](https://docs.microsoft.com/en-us/azure/data-factory/connector-azure-sql-database?tabs=data-factory#managed-identity). You may use the following SQL statement: 
+2. Grant your Synapse Analytics Workspace access to your target Azure SQL Database by adding the managed identity of your Synapse Analytics Workspace to the db_owner role in the Azure SQL Database. [See additional documentation](https://docs.microsoft.com/en-us/azure/data-factory/connector-azure-sql-database?tabs=data-factory#managed-identity). You may use the following SQL statement: 
 ```sql
 CREATE USER [YourSynapseAnalyticsWorkspaceName] FROM EXTERNAL PROVIDER
 GO
 ALTER ROLE [db_owner] ADD MEMBER [YourSynapseAnalyticsWorkspaceName]
 GO
 ```
-1. Download the [SQL Script that defines relevant database objects from this repository](SQL/CreateDatabaseObjects.zip) from this repository to your local computer.
+3. Download the [SQL Script that defines relevant database objects from this repository](SQL/CreateDatabaseObjects.sql) from this repository to your local computer.
 
 
-3. Create database objects that support configuration and logging of the data integration process by executing the T-SQL script. The script will create.
-- Schemas: orchestration and staging
-- Tables: orchestration.ProcessingControl and orchestration.ProcessingLog
-- Stored Procedure: orchestration.GetTablesToProcess
+4. Create database objects that support configuration and logging of the data integration process by executing the T-SQL script. The script will create.
+    * Schemas: orchestration and staging
+    * Tables: orchestration.ProcessingControl and orchestration.ProcessingLog
+    * Stored Procedure: orchestration.GetTablesToProcess
 
-4. Configure the data export process by adding a list of tables that need to be synchronized to the `orchestration.ProcessingControl table`. For each table configuration record, please specify:
-    1. SourceSchema - name of database schema in the source database (e.g., dbo)
-    1. SourceTable - name of source table (e.g., account_partitioned)
-    1. TargetSchema - name of target schema (e.g., dbo) 
-    1. TargetTable - name of target table (e.g., account)
-    1. KeyColumnName - name of the column that can serve as a unique key for the table (e.g., Id), which is required to implement the upsert process for incremental loading of data to the destination tables. For tables that do not require incremental updates, set the value to NULL.
-    1. IsIncremental - a binary flag indicating whether a table should be copied incrementally or in full.
+5. Configure the data export process by adding a list of tables that need to be synchronized to the `orchestration.ProcessingControl table`. For each table configuration record, please specify:
+    * SourceSchema - name of database schema in the source database (e.g., dbo)
+    * SourceTable - name of source table (e.g., account_partitioned)
+    * TargetSchema - name of target schema (e.g., dbo) 
+    * TargetTable - name of target table (e.g., account)
+    * KeyColumnName - name of the column that can serve as a unique key for the table (e.g., Id), which is required to implement the upsert process for incremental loading of data to the destination tables. For tables that do not require incremental updates, set the value to NULL.
+    * IsIncremental - a binary flag indicating whether a table should be copied incrementally or in full.
 
     Following is a sample SQL statement that could be used to add records to the ProcessingControl table:
     ```sql
@@ -83,7 +83,7 @@ GO
 6. Import the zip file with the downloaded Synapse Pipeline template to your Synapse Analytics Workspace, as illustrated below. 
 ![Import pipelines from template](Images/ImportPipelineFromTemplate.png)
 
-7. Configure linked services for target Azure SQL DB and the source Serverless SQL Pool endpoint (as illustrated below). Note: both linked services use the Azure SQL Database connector. 
+7. During the template import process, configure linked services for target Azure SQL DB and the source Serverless SQL Pool endpoint (as illustrated below). Note: both linked services use the Azure SQL Database connector. 
 ![Import pipelines from template](Images/ConfigureLinkedServices.png)
 
 8. Once the import process completes, you will find three pipelines in the *Dataverse - Synapse Serverless to SQLDB* folder, as illustrated below:
