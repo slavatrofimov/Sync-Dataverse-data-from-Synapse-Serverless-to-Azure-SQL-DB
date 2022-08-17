@@ -47,7 +47,7 @@ GO
 ALTER ROLE [db_owner] ADD MEMBER [YourSynapseAnalyticsWorkspaceName]
 GO
 ```
-5. If necessary, grant the managed identity of your Synapse Analytics Workspace access to the storage account container containing your Dataverse data by adding it to the *Storage Blob Data Reader* role. [See additional documentation] (https://docs.microsoft.com/en-us/azure/synapse-analytics/security/how-to-grant-workspace-managed-identity-permissions). 
+5. If necessary, grant the managed identity of your Synapse Analytics Workspace access to the storage account container containing your Dataverse data by adding it to the *Storage Blob Data Reader* role. [See additional documentation](https://docs.microsoft.com/en-us/azure/synapse-analytics/security/how-to-grant-workspace-managed-identity-permissions). 
 
 6. Download the [Synapse Pipeline template (packaged as a .zip file)](Pipelines/Sync%20Orchestration.zip) from this repository to your local computer.
 
