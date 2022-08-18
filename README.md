@@ -62,13 +62,15 @@ GO
 
 10. By default, the solution is designed to perform automatic discovery of tables available in the source Serverless SQL database. Any table with the suffix of "_partitioned" or "Metadata" will be automatically added to the *orchestration.ProcessingControl* table. If you prefer to manually load the list of tables required for synchronization, please set the *AutoPopulateListOfTablesToSync* parameter in the *Sync Orchestration* pipeline to *false*. Then, review instructions for manually loading the ProcessingControl table in the *Next Steps and Additional Considerations* section below.
 
-11. Trigger the *Sync Orchestration* pipeline, as illustrated below.
+11. By default, the solution will automatically add a clustered primary key index to each incrementally-updated table that does not have a primary key already. These primary keys will improve the efficiency of the incremental sync process. If you prefer to manage primary key creation manually, you may disable automatic primary key generation by setting the *AutoGeneratePrimaryKeys* parameter in the *Sync Orchestration* pipeline to *false*.
+
+12. Trigger the *Sync Orchestration* pipeline, as illustrated below.
 ![Trigger orchestration pipeline now](Images/TriggerNow.png)
 
-12. Monitor pipeline execution, as illustrated below.
+13. Monitor pipeline execution, as illustrated below.
 ![Trigger orchestration pipeline now](Images/MonitorPipelineRuns.png)
 
-12. Create a scheduled trigger to execute the  *Sync Orchestration* pipeline in an automated manner on a desired schedule. Note, since tables based on hourly snapshots of Dataverse data are the recommended data source for this solution, pipeline execution should be scheduled no more frequently than once per hour.
+14. Create a scheduled trigger to execute the  *Sync Orchestration* pipeline in an automated manner on a desired schedule. Note, since tables based on hourly snapshots of Dataverse data are the recommended data source for this solution, pipeline execution should be scheduled no more frequently than once per hour.
 
 ## Next Steps and Additional Considerations
 * If you chose to disable the automatic source table discovery feature by setting the *AutoPopulateListOfTablesToSync* parameter in the *Sync Orchestration* pipeline to *false*, please manually configure the data export process. You may do so by adding a list of tables that need to be synchronized to the `orchestration.ProcessingControl` table. For each table configuration record, please specify:
@@ -102,7 +104,9 @@ GO
     ```
 
 
-* This solution will automatically create tables in the target SQL Database. However, these tables will be created without any primary keys, clustered indices or non-clustered indices. Be sure to add appropriate primary keys and indices to each of your destination tables. At a minimum, add a primary key on the key column (which is typically called "Id") in each incrementally synced table. These primary keys will improve the efficiency of the incremental sync process.
+* This solution will automatically create tables in the target SQL Database. By default, the solution will also generate primary key constraints and corresponding clustered indexes for incrementally-updated tables. However, tables requiring full refresh will be created without any primary keys or clustered indexes. Be sure to add appropriate primary keys and indexes to each of your destination tables. In particular, if you chose to disable automatic primary key generation, add a primary key on the key column (which is typically called *Id*) in each incrementally synced table. These primary keys will improve the efficiency of the incremental sync process.
+
+* Optionally, consider creating non-clustered indexes to support specific query workloads that you anticipate.
 
 * Consider creating views on top of tables in the target SQL Database to hide deleted records to simplify data access from client applications.
 

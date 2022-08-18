@@ -69,16 +69,56 @@ SELECT PC.TableId,
 	PC.KeyColumnName,
 	ISNULL(PC.IsIncremental, 0) AS IsIncremental,
 	ISNULL(MAX(PL.HighWatermark), '1900-01-01') AS LowWatermark,
-	GETUTCDATE() AS HighWatermark
+	GETUTCDATE() AS HighWatermark,
+	CAST(CASE WHEN PC.IsIncremental = 1 AND PK.CONSTRAINT_NAME IS NULL THEN 1 ELSE 0 END AS BIT) AS NeedsPrimaryKey
 FROM orchestration.ProcessingControl PC
 	LEFT OUTER JOIN orchestration.ProcessingLog PL
 		ON PC.TableId= PL.TableId
 		AND PL.ProcessingEnded IS NOT NULL
+	LEFT OUTER JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS PK
+		ON PC.TargetSchema = PK.TABLE_SCHEMA
+		AND PC.TargetTable = PK.TABLE_NAME
+		AND PK.CONSTRAINT_TYPE = 'Primary Key'
 GROUP BY PC.TableId,
 	PC.SourceSchema,
 	PC.SourceTable,
 	PC.TargetSchema,
 	PC.TargetTable,
 	PC.KeyColumnName,
-	PC.IsIncremental
+	PC.IsIncremental,
+	PK.CONSTRAINT_NAME
+GO
+/****** Object:  StoredProcedure [orchestration].[GeneratePrimaryKey] ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE PROCEDURE [orchestration].[GeneratePrimaryKey]
+	@Schema nvarchar(128), 
+	@Table nvarchar(128), 
+	@KeyColumn nvarchar(128)
+
+AS
+
+DECLARE @SQL nvarchar(MAX)
+
+--Make sure that a Primary Key constraint does not exist on the specified table
+IF NOT EXISTS (
+	SELECT * 
+	FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+	WHERE CONSTRAINT_TYPE = 'Primary Key'
+	AND TABLE_SCHEMA = @Schema
+	AND TABLE_NAME = @Table
+)
+
+BEGIN
+	--Make key column non-nullable
+	SELECT @SQL = 'ALTER TABLE ['+ @Schema + '].[' + @Table + '] ALTER COLUMN [' + @KeyColumn + '] ' + system_type_name + ' NOT NULL'
+	FROM sys.dm_exec_describe_first_result_set('SELECT [' + @KeyColumn + '] FROM  ['+ @Schema + '].[' + @Table + ']' , NULL, NULL)
+	EXEC sp_executesql @stmt = @SQL
+
+	--Add primary key
+	SET @SQL = 'ALTER TABLE ['+ @Schema + '].[' + @Table + '] ADD CONSTRAINT [PK_' + @Schema + '_' + @Table + '] PRIMARY KEY CLUSTERED ([' + @KeyColumn + '])'
+	EXEC sp_executesql @stmt = @SQL
+END
 GO
