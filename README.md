@@ -24,6 +24,14 @@ Deleted records in incrementally copied tables are handled as soft deletes by ad
 
 To avoid read/write contention issues while reading data from files that are being written to by Synapse Link for Dataverse, it is recommended to use data from [read-only hourly snapshots](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/azure-synapse-link-synapse#access-near-real-time-data-and-read-only-snapshot-data-preview). Tables based on snapshot data in Serverless SQL Pool databases are designated with the "_partitioned" suffix. Be sure to reference the _partitioned tables when configuring the source tables in this solution. Note, at the time of this writing, Synapse Link for Dataverse would not create snapshot data for empty tables.
 
+This solution automatically handles common types of schema evolution in the source system. Synapse Link for Dataverse will automatically accommodate newly added columns (as documented [here](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/export-data-lake-faq)). This solution will detect newly-added columns during each pipeline execution and will add corresonding columns to the tables in the target database. Columns deleted from the source system will remain in the target database, but will no longer be updated.
+
+This solution will automatically create several helper objects in the target Azure SQL Database during the first synchronization. These objects will support configuration and logging of the data integration process. Following is the list of helper database objects:
+    * Schemas: orchestration and staging
+    * Tables: orchestration.ProcessingControl and orchestration.ProcessingLog
+    * Stored Procedures: orchestration.GetTablesToProcess, orchestration.GeneratePrimaryKey and orchestration.SchemaDriftAddColumns
+
+
 ### Prerequisites
 1. You have [provisioned a Synapse Analytics Workspace](https://docs.microsoft.com/en-us/azure/synapse-analytics/quickstart-create-workspace).
 1. You have [configured Synapse Link for Dataverse to export relevant entities to a Synapse Analytics Workspace](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/azure-synapse-link-synapse). This solution requires table export to be configured in *append-only mode* as described in the following [article](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/azure-synapse-link-advanced-configuration#in-place-updates-vs-append-only-writes).
@@ -33,44 +41,38 @@ To avoid read/write contention issues while reading data from files that are bei
 ### Implementation
 1. Provision an Azure SQL Database to serve as the target of your Dataverse data. [See documentation](https://docs.microsoft.com/en-us/azure/azure-sql/database/single-database-create-quickstart?view=azuresql&tabs=azure-portal). Ensure that the "Allow Azure services and resources to access this server" setting is enabled. [See documentation](https://docs.microsoft.com/en-us/azure/azure-sql/database/firewall-configure?view=azuresql)
 
-2. Download the [SQL Script that defines relevant database objects from this repository](SQL/CreateDatabaseObjects.sql) from this repository to your local computer.
+2. Grant your Synapse Analytics Workspace access to your target Azure SQL Database by adding the managed identity of your Synapse Analytics Workspace to the db_owner role in the Azure SQL Database. [See additional documentation](https://docs.microsoft.com/en-us/azure/data-factory/connector-azure-sql-database?tabs=data-factory#managed-identity). You may use the following SQL statement: 
 
-3. Create database objects in the target Azure SQL Database that will support configuration and logging of the data integration process by executing the T-SQL script downloaded in the previous step. The script will create.
-    * Schemas: orchestration and staging
-    * Tables: orchestration.ProcessingControl and orchestration.ProcessingLog
-    * Stored Procedure: orchestration.GetTablesToProcess
-
-4. Grant your Synapse Analytics Workspace access to your target Azure SQL Database by adding the managed identity of your Synapse Analytics Workspace to the db_owner role in the Azure SQL Database. [See additional documentation](https://docs.microsoft.com/en-us/azure/data-factory/connector-azure-sql-database?tabs=data-factory#managed-identity). You may use the following SQL statement: 
-```
+```SQL
 CREATE USER [YourSynapseAnalyticsWorkspaceName] FROM EXTERNAL PROVIDER
 GO
 ALTER ROLE [db_owner] ADD MEMBER [YourSynapseAnalyticsWorkspaceName]
 GO
 ```
-5. Ensure that the managed identity of your Synapse Analytics Workspace has access to the storage account container where your Dataverse data is stored by adding it to the *Storage Blob Data Reader* role. [See additional documentation](https://docs.microsoft.com/en-us/azure/synapse-analytics/security/how-to-grant-workspace-managed-identity-permissions). 
+3. Ensure that the managed identity of your Synapse Analytics Workspace has access to the storage account container where your Dataverse data is stored by adding it to the *Storage Blob Data Reader* role. [See additional documentation](https://docs.microsoft.com/en-us/azure/synapse-analytics/security/how-to-grant-workspace-managed-identity-permissions). 
 
-6. Download the [Synapse Pipeline template (packaged as a .zip file)](Pipelines/Sync%20Orchestration.zip) from this repository to your local computer.
+4. Download the [Synapse Pipeline template (packaged as a .zip file)](Pipelines/Sync%20Orchestration.zip) from this repository to your local computer.
 
-7. Import the zip file with the downloaded Synapse Pipeline template to your Synapse Analytics Workspace, as illustrated below. 
+5. Import the zip file with the downloaded Synapse Pipeline template to your Synapse Analytics Workspace, as illustrated below. 
 ![Import pipelines from template](Images/ImportPipelineFromTemplate.png)
 
-8. During the template import process, configure linked services for target Azure SQL DB and the source Serverless SQL Pool endpoint (as illustrated below). 
+6. During the template import process, configure linked services for target Azure SQL DB and the source Serverless SQL Pool endpoint (as illustrated below). 
 ![Import pipelines from template](Images/ConfigureLinkedServices.png)
 
-9. Once the import process completes, you will find four pipelines in the *Dataverse - Synapse Serverless to SQLDB* folder, as illustrated below:
+7. Once the import process completes, you will find five pipelines in the *Dataverse - Synapse Serverless to SQLDB* folder, as illustrated below:
 ![Imported pipelines](Images/ImportedPipelines.png)
 
-10. By default, the solution is designed to perform automatic discovery of tables available in the source Serverless SQL database. Any table with the suffix of "_partitioned", as well as certain metadata tables (StateMetadata, StatusMetadata, OptionsetMetadata, GlobalOptionsetMetadata and TargetMetadata) will be automatically added to the *orchestration.ProcessingControl* table. If you prefer to manually load the list of tables required for synchronization, please set the *AutoPopulateListOfTablesToSync* parameter in the *Sync Orchestration* pipeline to *false*. Then, review instructions for manually loading the ProcessingControl table in the *Next Steps and Additional Considerations* section below.
+8. By default, the solution is designed to perform automatic discovery of tables available in the source Serverless SQL database. Any table with the suffix of "_partitioned", as well as certain metadata tables (StateMetadata, StatusMetadata, OptionsetMetadata, GlobalOptionsetMetadata and TargetMetadata) will be automatically added to the *orchestration.ProcessingControl* table. If you prefer to manually load the list of tables required for synchronization, please set the *AutoPopulateListOfTablesToSync* parameter in the *Sync Orchestration* pipeline to *false*. Then, review instructions for manually loading the ProcessingControl table in the *Next Steps and Additional Considerations* section below.
 
-11. By default, the solution will automatically add a clustered primary key index to each incrementally-updated table that does not have a primary key already. These primary keys will improve the efficiency of the incremental sync process. If you prefer to manage primary key creation manually, you may disable automatic primary key generation by setting the *AutoGeneratePrimaryKeys* parameter in the *Sync Orchestration* pipeline to *false*.
+9. By default, the solution will automatically add a clustered primary key index to each incrementally-updated table that does not have a primary key already. These primary keys will improve the efficiency of the incremental sync process. If you prefer to manage primary key creation manually, you may disable automatic primary key generation by setting the *AutoGeneratePrimaryKeys* parameter in the *Sync Orchestration* pipeline to *false*.
 
-12. Trigger the *Sync Orchestration* pipeline, as illustrated below.
+10. Trigger the *Sync Orchestration* pipeline, as illustrated below.
 ![Trigger orchestration pipeline now](Images/TriggerNow.png)
 
-13. Monitor pipeline execution, as illustrated below.
+11. Monitor pipeline execution, as illustrated below.
 ![Trigger orchestration pipeline now](Images/MonitorPipelineRuns.png)
 
-14. Create a scheduled trigger to execute the  *Sync Orchestration* pipeline in an automated manner on a desired schedule. Note, since tables based on hourly snapshots of Dataverse data are the recommended data source for this solution, pipeline execution should be scheduled no more frequently than once per hour.
+12. Create a scheduled trigger to execute the  *Sync Orchestration* pipeline in an automated manner on a desired schedule. Note, since tables based on hourly snapshots of Dataverse data are the recommended data source for this solution, pipeline execution should be scheduled no more frequently than once per hour.
 
 ## Next Steps and Additional Considerations
 * If you chose to disable the automatic source table discovery feature by setting the *AutoPopulateListOfTablesToSync* parameter in the *Sync Orchestration* pipeline to *false*, please manually configure the data export process. You may do so by adding a list of tables that need to be synchronized to the `orchestration.ProcessingControl` table. For each table configuration record, please specify:
@@ -114,9 +116,9 @@ GO
 
 * If the *AutoPopulateListOfTablesToSync* parameter in the *Sync Orchestration* pipeline is set to *true*, any new tables added to your Synapse Link for Dataverse will be automatically added to the ProcessingControl list. Similarly, you may manually add new tables to be synchronized by this solution at any time. Simply add the configuration details for the desired tables to the `orchestration.ProcessingControl` table. The solution will automatically create a table in the destination datablase and will perform a full load of the table during the next scheduled pipeline execution. Incremental synchornizations will continue in the future (if the table is configured for incremental sync). As discussed above, please manually create indexes and any auxiliary views after the table has been created.
 
-* Schema evolution requires special consideration. While Synapse Link for Dataverse will automatically accommodate newly added columns (as documented [here](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/export-data-lake-faq)), this solution is not designed to accommodate new columns. If a new column has been added to a Dataverse entity, you may handle it by:
-    * Manually altering the definition of the table in the target SQL Database (recommended)
-    * Dropping the table in the target SQL Database and deleting all records in the orchestration.ProcessingLog table related to the affected table. The table will be re-added and fully loaded with data during the next scheduled synchronization.
+* As previously discussed, common schema evolution scenarios (i.e., columns being added or deleted) are handled automatically. However, other potential scenarios, such as data type changes will need to be handled manually. Consider the following approaches:
+    * Manually alter the definition of the table in the target SQL Database (recommended)
+    * Drop the table in the target SQL Database and delet all records in the orchestration.ProcessingLog table related to the affected table. The table will be re-added and fully loaded with data during the next scheduled synchronization.
 
 * If desired, consider hardening security settings of the implemented solution, which may include:
     * Applying more restrictive firewall rules to the Azure SQL Server hosting your target database
