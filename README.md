@@ -59,6 +59,9 @@ GO
 6. During the template import process, configure linked services for target Azure SQL DB and the source Serverless SQL Pool endpoint (as illustrated below). 
 ![Import pipelines from template](Images/ConfigureLinkedServices.png)
 
+> Note: while configuring linked services for the source and target databases, please manually specify the fully-qualified domain name of your SQL endpoint and database name as illustrated below:
+![Import pipelines from template](Images/ConfigureLinkedServices-detail.png)
+
 7. Once the import process completes, you will find five pipelines in the *Dataverse - Synapse Serverless to SQLDB* folder, as illustrated below:
 ![Imported pipelines](Images/ImportedPipelines.png)
 
