@@ -126,3 +126,7 @@ GO
 * If desired, consider hardening security settings of the implemented solution, which may include:
     * Applying more restrictive firewall rules to the Azure SQL Server hosting your target database
     * Granting more restrictive database permissions to the managed identity of your Synapse Analytics Workspace (as compared to the db_owner role suggested above)
+
+
+## Acknowledgements
+Special thanks to [Scott Sewell](https://github.com/mscottsewell) for solution testing and validation.
