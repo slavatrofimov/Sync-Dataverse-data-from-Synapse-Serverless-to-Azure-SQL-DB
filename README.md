@@ -23,7 +23,7 @@ In order to facilitate incremental copying of data, this solution requires table
 
 Deleted records in incrementally copied tables are handled as soft deletes by adding a flag to the IsDelete column. If desired, database views can be added in the target SQL database to filter out the deleted records.
 
-For scenarios requiring lower latencies (such as near-real-time access to data), the solution can be configured not to use the "_partitioned" tables based on hourly snapshots, but rather regular tables that are receiving data from Synapse Link on an ongoing basis. 
+For scenarios requiring lower latencies (such as near-real-time access to data), the solution can be configured not to use the "_partitioned" tables based on hourly snapshots, but rather regular tables that are receiving data from Synapse Link on an ongoing basis.
 
 This solution automatically handles common types of schema evolution in the source system. Synapse Link for Dataverse will automatically accommodate newly added columns (as documented [here](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/export-data-lake-faq)). This solution will detect newly-added columns during each pipeline execution and will add corresonding columns to the tables in the target database. Columns deleted from the source system will remain in the target database, but will no longer be updated.
 
@@ -97,9 +97,16 @@ While triggering the execution of the pipeline, you will be prompted to configur
     1. If desired, you may update records in the *orchestration.ProcessingControl* table to reassign specific tables to a separate Table Group (such as TableGroup 2, 3, etc.)
     1. When triggering the execution of the *Sync Orchestration* pipeline, specify which TableGroup should be synchornized by setting the value of the *TableGroupToSync* parameter.
 
-1. **UsePartitionedTables** (default: true): by default, this solution is configured to use external tables  in the Serverless SQL Pool database that leverage [read-only hourly snapshots](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/azure-synapse-link-synapse#access-near-real-time-data-and-read-only-snapshot-data-preview). Using read-only snapshots helps to avoid read/write contention issues while reading data from files that are being written to by Synapse Link for Dataverse. Tables based on snapshot data in Serverless SQL Pool databases are labeled with the "_partitioned" suffix. Note, at the time of this writing, Synapse Link for Dataverse would not create snapshot data for empty tables. For scenarios requiring lower latencies (such as near-real-time access to data), the solution can be configured not to use the "_partitioned" tables based on hourly snapshots, but rather regular tables that are receiving data from Synapse Link on an ongoing basis.
+1. **UsePartitionedTables** (default: true): by default, this solution is configured to use external tables  in the Serverless SQL Pool database that leverage [read-only hourly snapshots](https://docs.microsoft.com/en-us/power-apps/maker/data-platform/azure-synapse-link-synapse#access-near-real-time-data-and-read-only-snapshot-data-preview).
 
-1. **DefaultTargetSchema** (default: dbo): by default, the solution will create destination tables in the *dbo* schema of the target database. If you prefer to create destination tables in a different schema, change the *DefaultTargetSchema* parameter to meet your requirements.
+    1. Using read-only snapshots helps to avoid read/write contention issues while reading data from files that are being written to by Synapse Link for Dataverse. Tables based on snapshot data in Serverless SQL Pool databases are labeled with the "_partitioned" suffix. Note, at the time of this writing, Synapse Link for Dataverse would not create snapshot data for empty tables. 
+
+    1. For scenarios requiring lower latencies (such as near-real-time access to data), the solution can be configured not to use the "_partitioned" tables based on hourly snapshots, but rather regular tables that are receiving data from Synapse Link on an ongoing basis. You may do so, but setting the UsePartitionedTables parameter to *false*. To support this configuration, your Synapse Link for Dataverse must satisfy the following requirements:
+    
+        1. Synapse Link for Dataverse must have been configured after August 2022. External Tables created by Synapse Link for Dataverse after August 2022 are configured with the [ALLOW_INCONSISTENT_READS](https://learn.microsoft.com/en-us/azure/synapse-analytics/sql/create-use-external-tables#external-table-on-appendable-files) table option, which allows for Serverless SQL Pools to read the data files while new records are being written to these files.
+        1. Synapse Link for Dataverse must have been configured to export data in CSV format. At the time of this writing, Synapse Link for Dataverse implementations that export data in the Delta Lake format lack the soft-delete functionality that this synchronization solution requires.
+
+5. **DefaultTargetSchema** (default: dbo): by default, the solution will create destination tables in the *dbo* schema of the target database. If you prefer to create destination tables in a different schema, change the *DefaultTargetSchema* parameter to meet your requirements.
 
 > The *DefaultTargetSchema* you specify must exist in the target database. If necessary, create the desired schema.
 
