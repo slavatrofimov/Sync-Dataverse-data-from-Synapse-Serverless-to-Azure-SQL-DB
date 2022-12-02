@@ -87,7 +87,7 @@ While triggering the execution of the pipeline, you will be prompted to configur
 > - UsePartitionedTables
 > - DefaultTargetSchema
 
-1. **AutoPopulateListOfTablesToSync** (default: true): by default, the solution is designed to perform automatic discovery of tables available in the source Serverless SQL database. Any table that appears to contains Dataverse data, as well as certain metadata tables (StateMetadata, StatusMetadata, OptionsetMetadata, GlobalOptionsetMetadata and TargetMetadata) will be automatically added to the *orchestration.ProcessingControl* table. If you prefer to disable auto-discovery (perhaps, after initially populating the list of desired tables), please set the *AutoPopulateListOfTablesToSync* parameter in the *Sync Orchestration* pipeline to *false*.
+1. **AutoPopulateListOfTablesToSync** (default: true): by default, the solution is designed to perform automatic discovery of tables available in the source Serverless SQL database. Any table that appears to contains Dataverse data, as well as certain metadata tables (StateMetadata, StatusMetadata, OptionsetMetadata, GlobalOptionsetMetadata and TargetMetadata) will be automatically added to the *orchestration.ProcessingControl* table. If you prefer to disable auto-discovery (perhaps, after initially populating the list of desired tables), please set the *AutoPopulateListOfTablesToSync* parameter in the *Sync Orchestration* pipeline to *false*. Note, to maximize efficiency, it is recommended to disable automatic discovery of tables when configuring triggers that will be executed with high frequency (for near-real-time data access scenarios).
 
 1. **AutoGeneratePrimaryKeys** (default: true): by default, the solution will automatically add a clustered primary key index to each target table that does not have a primary key already. These primary keys will improve the efficiency of the incremental sync process. If you prefer to manage primary key creation manually, you may disable automatic primary key generation by setting the *AutoGeneratePrimaryKeys* parameter in the *Sync Orchestration* pipeline to *false*.
 
@@ -122,6 +122,10 @@ Finally, you may examine the content of tables in the target database and identi
 Create a scheduled trigger to execute the *Sync Orchestration* pipeline in an automated manner on a desired schedule. As discussed in the previous section, you may create multiple triggers, using different *TableGroupToSync* parameter values to optimize the synchronization of groups of tables with different data latency requirements.
 
 Note, when *UsePartitionedTables* parameter is set to true, pipeline execution should be scheduled no more frequently than once per hour (since underlying snapshots will be created on an hourly basis).
+> **IMPORTANT!** Please ensure that the time interval between pipeline triggers is sufficiently long (compared to the duration of each pipeline execution) to prevent the possibility of multiple pipeline executions attempting to update the same group of tables at the same time. Simultaneous execution of the synchronization pipeline for the same group of tables may apply updates to certain records ouf of order, which could lead to data consistency problems! 
+
+>When attempting to execute the synchronization pipeline frequently (for near-real-time data access), consider using the [Tumbling Window trigger](https://learn.microsoft.com/en-us/azure/data-factory/how-to-create-tumbling-window-trigger?tabs=synapse-analytics%2Cazure-powershell) (rather than Scheduled trigger) and set the [maxConcurrency property of the trigger to 1](https://learn.microsoft.com/en-us/azure/data-factory/how-to-create-tumbling-window-trigger?tabs=synapse-analytics%2Cazure-powershell#:~:text=No-,maxConcurrency,-The%20number%20of) (which will ensure that new trigger runs will be added to a queue but will not run in parallel). Note that you can have only one Tumbling Window trigger per pipeline--it is advisable to use it for the table group that requires most frequent synchronization, while using Scheduled triggers with other table groups.
+
 
 ## Next Steps and Additional Considerations
 * By default, all discovered tables will included in the synchronization process. If you woudl like to exclude specific tables from synchronization, you may update records in the *orchestration.ProcessingControl* table and set the *IsEnabled* flag to 0 for any tabel that you do not wish to synchronize.
@@ -141,6 +145,12 @@ Note, when *UsePartitionedTables* parameter is set to true, pipeline execution s
 * As previously discussed, common schema evolution scenarios (i.e., columns being added or deleted) are handled automatically. However, other potential scenarios, such as data type changes will need to be handled manually. Consider the following approaches:
     * Manually alter the definition of the table in the target SQL Database (recommended)
     * Drop the table in the target SQL Database and delete all records in the orchestration.ProcessingLog table related to the affected table. The table will be re-added and fully loaded with data during the next scheduled synchronization.
+
+* This solution accelerator is designed to synchronize all columns from tables enabled for synchronization. In some scenarios, you may prefer to sync only a subset of columns from a given table (which may also improve the efficiency of the synchronization process). To accomplish that you may: 
+    1.	Create a new Serverless SQL Database (within the same Synapse Analytics Workspace as the Lake Database created by Synapse Link for Dataverse).
+    2.	Create a set of cross-database views pointed to the tables in the Lake Database managed by Synapse Link for Dataverse. 
+    3.	As part of view definitions, include the columns that you are interested in and omit the ones that are not relevant. Note, the following columns are required for incrementally-updated tables: *Id, IsDeleted, SinkModifiedOn and versionnumber*.
+    4.	The Linked Service in the Synapse Pipeline created by the solution accelerator will need to be pointed to the Serverless SQL Database that you have created (rather than the Lake Database created by Synapse Link for Dataverse).
 
 * If desired, consider hardening security settings of the implemented solution, which may include:
     * Applying more restrictive firewall rules to the Azure SQL Server hosting your target database
